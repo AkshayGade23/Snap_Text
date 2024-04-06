@@ -123,15 +123,12 @@ def main():
     target_language = st.selectbox("Select Document language (Target)", ["en", "es", "fr", "de"], key="target_language")
     response_language = st.selectbox("Select Document language (Response)", ["en", "es", "fr", "de"], key="response_language")
 
-
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = None
     if "user_question" not in st.session_state:
         st.session_state.user_question = ""
-
-
 
     st.header("Snap Text :books:")
 
