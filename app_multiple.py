@@ -4,14 +4,13 @@ from PyPDF2 import PdfReader
 from PIL import Image
 import pytesseract
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
+from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template,sidebar_custom_css
-from streamlit_chat import message
-from langchain.llms import HuggingFaceHub
+
 import speech_recognition as sr
 from gtts import gTTS
 from io import BytesIO
@@ -110,8 +109,6 @@ def handle_microphone_input():
         st.session_state.user_question = "Could not understand audio"
     except sr.RequestError as e:
         st.session_state.user_question = f"Error with the speech recognition service; {e}"
-
-    # st.text("You said: " + st.session_state.user_question)
 
 def main():
     load_dotenv()
