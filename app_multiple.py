@@ -131,6 +131,8 @@ def main():
     if "user_question" not in st.session_state:
         st.session_state.user_question = ""
 
+
+
     st.header("Snap Text :books:")
 
     # Add a microphone button

@@ -50,6 +50,9 @@ sidebar_custom_css = """
 [data-testid="stSidebar"] {
     background-color: #FEBE9A; /* Change this color to your desired background color */
 }
+
+
+
 </style>
 """
 
