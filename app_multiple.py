@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
@@ -10,6 +11,14 @@ from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template,sidebar_custom_css
+from pytube import YouTube
+import librosa
+import soundfile as sf
+import torch
+from transformers import pipeline
+from huggingsound import SpeechRecognitionModel
+import shutil
+
 
 import speech_recognition as sr
 from gtts import gTTS
@@ -27,7 +36,7 @@ def get_pdf_text(pdf_docs):
                 text += page.extract_text()
         elif file.type.startswith("image/"):
             img = Image.open(file)
-            pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+            pytesseract.pytesseract.tesseract_cmd = f"{os.environ['TESSERACT_CMD']}"
             text += pytesseract.image_to_string(img)
     return text
 
@@ -110,6 +119,94 @@ def handle_microphone_input():
     except sr.RequestError as e:
         st.session_state.user_question = f"Error with the speech recognition service; {e}"
 
+
+
+def download_video(videoURL):
+    
+    yt = YouTube(videoURL)
+
+    # deleting exiting directories \audio and \audio_chunks
+    if os.path.exists("audio"):
+        shutil.rmtree("audio")
+
+    if os.path.exists("audio_chunks"):
+        shutil.rmtree("audio_chunks")
+
+
+    # making directories \audio and \audio_chunks
+    os.mkdir("./audio") # .mp3 and .wav file of whole video
+    os.mkdir("./audio_chunks") # original files chunks  
+
+    yt.streams.filter(only_audio = True, file_extension = 'mp4').first().download(filename = 'audio\ytAudio.mp4')
+    
+    os.system("ffmpeg -i audio\ytAudio.mp4 -acodec pcm_s16le -ar 16000 audio\ytAudio.wav")
+   
+
+
+def audio_chunking(inputFile):
+    print(librosa.get_samplerate(inputFile))
+
+    # Stream over 30 seconds chunks rather than load the whole file
+    stream = librosa.stream(
+        inputFile,
+        block_length=30,
+        frame_length=16000,
+        hop_length=16000
+
+    )
+    number_of_files = 0
+    for i,speech in enumerate(stream):
+        number_of_files +=1
+        sf.write(f'audio_chunks\{i}.wav', speech, 16000)
+    
+    return number_of_files
+
+
+def audio_transcribe(number_of_files):
+    audioPath = []
+    
+    for a in range(number_of_files):
+        audioPath.append(f'audio_chunks\{a}.wav')
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+   
+
+    #  issue with "from huggingsound import SpeechRecognitionModel"
+    model = SpeechRecognitionModel("jonatasgrosman/wav2vec2-large-xlsr-53-english", device = device)
+
+    transcriptions = model.transcribe(audioPath)
+
+    fullTranscript = ' '
+    for item in transcriptions:
+        fullTranscript += ''.join(item['transcription'])
+    
+    # transcription summurizaton 
+
+    # print(fullTranscript)
+    # print("fdfsdfd")
+    # summarization = pipeline('summarization')
+    # summarizedText = summarization(fullTranscript)
+    # return summarizedText[0]['summary_text']
+
+    return fullTranscript
+
+
+def youtube_process(videoURL):
+
+    # downloading video and stored in /cotent/s
+    download_video(videoURL)
+
+    # audio chunking 
+    inputFile = "audio\ytAudio.wav"
+    number_of_files= audio_chunking(inputFile)
+
+    # # audio transcribe and summarization
+    summarizedText = audio_transcribe(number_of_files)
+    print(summarizedText)
+    return summarizedText   
+
+
+
 def main():
     load_dotenv()
     st.set_page_config(page_title="Snap Text",
@@ -126,6 +223,8 @@ def main():
         st.session_state.chat_history = None
     if "user_question" not in st.session_state:
         st.session_state.user_question = ""
+    if "youtube_link" not in st.session_state:
+        st.session_state.youtube_link = ""
 
     st.header("Snap Text :books:")
 
@@ -139,10 +238,14 @@ def main():
         handle_userinput(user_question,target_language,response_language)
 
     with st.sidebar:
+
+        # Pdf and documents
         st.subheader("Your documents")
         pdf_docs = st.file_uploader(
-            "Upload your PDFs here and click on 'Process'", accept_multiple_files=True)
-        if st.button("Process"):
+            "Upload your PDFs here and click on 'Process Pdf'", accept_multiple_files=True)
+        
+
+        if st.button("Process Pdf"):
             with st.spinner("Processing"):
                 # get pdf text
                 raw_text = get_pdf_text(pdf_docs)
@@ -156,6 +259,30 @@ def main():
                 # create conversation chain
                 st.session_state.conversation = get_conversation_chain(
                     vectorstore)
+                
+       
+
+        # Youtube link
+        st.subheader("Youtube Link")
+        youtube_link = st.text_input("Insert video link and click on 'Process Link'", value = st.session_state.youtube_link)
+
+
+        if st.button("Process Link"):
+            with st.spinner("Processing"):
+                # get transcription of youtube video
+                raw_text = youtube_process(youtube_link)
+
+                # # get the text chunks
+                # text_chunks = get_text_chunks(raw_text)
+
+                # # create vector store
+                # vectorstore = get_vectorstore(text_chunks)
+
+                # # create conversation chain
+                # st.session_state.conversation = get_conversation_chain(
+                #     vectorstore)
+
+        
 
 if __name__ == '__main__':
     main()
