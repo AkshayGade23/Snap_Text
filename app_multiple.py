@@ -17,6 +17,7 @@ import soundfile as sf
 import torch
 from transformers import pipeline
 from huggingsound import SpeechRecognitionModel
+import shutil
 
 
 import speech_recognition as sr
@@ -35,7 +36,7 @@ def get_pdf_text(pdf_docs):
                 text += page.extract_text()
         elif file.type.startswith("image/"):
             img = Image.open(file)
-            pytesseract.pytesseract.tesseract_cmd = r"E:\Cfiles\Tesseract-OCR\tesseract.exe"
+            pytesseract.pytesseract.tesseract_cmd = f"{os.environ['TESSERACT_CMD']}"
             text += pytesseract.image_to_string(img)
     return text
 
@@ -121,9 +122,20 @@ def handle_microphone_input():
 
 
 def download_video(videoURL):
-    print(videoURL)
-    print("dfsdfsfjgbkgnfgndfndsfsdnf")
+    
     yt = YouTube(videoURL)
+
+    # deleting exiting directories \audio and \audio_chunks
+    if os.path.exists("audio"):
+        shutil.rmtree("audio")
+
+    if os.path.exists("audio_chunks"):
+        shutil.rmtree("audio_chunks")
+
+
+    # making directories \audio and \audio_chunks
+    os.mkdir("./audio") # .mp3 and .wav file of whole video
+    os.mkdir("./audio_chunks") # original files chunks  
 
     yt.streams.filter(only_audio = True, file_extension = 'mp4').first().download(filename = 'audio\ytAudio.mp4')
     
@@ -157,8 +169,7 @@ def audio_transcribe(number_of_files):
         audioPath.append(f'audio_chunks\{a}.wav')
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("affdsijjjjjjjjj ")
-    print(device)
+   
 
     #  issue with "from huggingsound import SpeechRecognitionModel"
     model = SpeechRecognitionModel("jonatasgrosman/wav2vec2-large-xlsr-53-english", device = device)
@@ -170,9 +181,14 @@ def audio_transcribe(number_of_files):
         fullTranscript += ''.join(item['transcription'])
     
     # transcription summurizaton 
-    summarization = pipeline('summarization')
-    summarizedText = summarization(fullTranscript)
-    return summarizedText[0]['summary_text']
+
+    # print(fullTranscript)
+    # print("fdfsdfd")
+    # summarization = pipeline('summarization')
+    # summarizedText = summarization(fullTranscript)
+    # return summarizedText[0]['summary_text']
+
+    return fullTranscript
 
 
 def youtube_process(videoURL):
