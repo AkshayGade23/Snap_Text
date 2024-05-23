@@ -18,7 +18,8 @@ import torch
 from transformers import pipeline
 from huggingsound import SpeechRecognitionModel
 import shutil
-
+from langchain_community.llms import HuggingFaceEndpoint
+from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 
 import speech_recognition as sr
 from gtts import gTTS
@@ -56,23 +57,34 @@ def translate_text(text, response_language):
     return translated_text.text
 
 def get_vectorstore(text_chunks):
-    embeddings = OpenAIEmbeddings()
+    # embeddings = OpenAIEmbeddings()
     # embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    embeddings = HuggingFaceEmbeddings()
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
-def get_conversation_chain(vectorstore):
-    llm = ChatOpenAI()
-    # llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
-
-    memory = ConversationBufferMemory(
-        memory_key='chat_history', return_messages=True)
+def get_conversation_chain(vetorestore):
+    # llm = HuggingFaceHub(repo_id="mistralai/Mistral-7B-Instruct-v0.2", model_kwargs={"temperature":5,
+                                                    #    "max_length":64})
+    # llm=pipeline('text-generation', model='gpt2-medium')
+    
+    llm_model = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    llm = HuggingFaceEndpoint(
+            repo_id=llm_model, 
+            # model_kwargs={"temperature": temperature, "max_new_tokens": max_tokens, "top_k": top_k, "load_in_8bit": True}
+            temperature = 0.7,
+            max_new_tokens =1024,
+            top_k = 3,
+            load_in_8bit = True,
+        )
+    memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=vectorstore.as_retriever(),
+        retriever=vetorestore.as_retriever(),
         memory=memory
     )
     return conversation_chain
+
 
 def handle_userinput(user_question, target_language,response_language):
     # Translate user's question to English (or desired target language)
