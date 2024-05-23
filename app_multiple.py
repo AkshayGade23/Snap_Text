@@ -103,6 +103,7 @@ def handle_userinput(user_question, target_language,response_language):
                 engine.say(message.content) 
                 engine.runAndWait()
 
+
 def handle_microphone_input():
     recognizer = sr.Recognizer()
 
@@ -123,8 +124,6 @@ def handle_microphone_input():
 
 def download_video(videoURL):
     
-    yt = YouTube(videoURL)
-
     # deleting exiting directories \audio and \audio_chunks
     if os.path.exists("audio"):
         shutil.rmtree("audio")
@@ -132,10 +131,11 @@ def download_video(videoURL):
     if os.path.exists("audio_chunks"):
         shutil.rmtree("audio_chunks")
 
-
     # making directories \audio and \audio_chunks
     os.mkdir("./audio") # .mp3 and .wav file of whole video
-    os.mkdir("./audio_chunks") # original files chunks  
+    os.mkdir("./audio_chunks") # original files chunks
+
+    yt = YouTube(videoURL)
 
     yt.streams.filter(only_audio = True, file_extension = 'mp4').first().download(filename = 'audio\ytAudio.mp4')
     
@@ -144,7 +144,8 @@ def download_video(videoURL):
 
 
 def audio_chunking(inputFile):
-    print(librosa.get_samplerate(inputFile))
+    
+    librosa.get_samplerate(inputFile)
 
     # Stream over 30 seconds chunks rather than load the whole file
     stream = librosa.stream(
@@ -152,8 +153,8 @@ def audio_chunking(inputFile):
         block_length=30,
         frame_length=16000,
         hop_length=16000
-
     )
+
     number_of_files = 0
     for i,speech in enumerate(stream):
         number_of_files +=1
