@@ -18,8 +18,9 @@ import torch
 from transformers import pipeline
 from huggingsound import SpeechRecognitionModel
 import shutil
-
-
+from langchain_community.llms import HuggingFaceEndpoint
+from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+from streamlit_chat import message
 import speech_recognition as sr
 from gtts import gTTS
 from io import BytesIO
@@ -56,23 +57,34 @@ def translate_text(text, response_language):
     return translated_text.text
 
 def get_vectorstore(text_chunks):
-    embeddings = OpenAIEmbeddings()
+    # embeddings = OpenAIEmbeddings()
     # embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    embeddings = HuggingFaceEmbeddings()
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
-def get_conversation_chain(vectorstore):
-    llm = ChatOpenAI()
-    # llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
-
-    memory = ConversationBufferMemory(
-        memory_key='chat_history', return_messages=True)
+def get_conversation_chain(vetorestore):
+    # llm = HuggingFaceHub(repo_id="mistralai/Mistral-7B-Instruct-v0.2", model_kwargs={"temperature":5,
+                                                    #    "max_length":64})
+    # llm=pipeline('text-generation', model='gpt2-medium')
+    
+    llm_model = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    llm = HuggingFaceEndpoint(
+            repo_id=llm_model, 
+            # model_kwargs={"temperature": temperature, "max_new_tokens": max_tokens, "top_k": top_k, "load_in_8bit": True}
+            temperature = 0.7,
+            max_new_tokens =1024,
+            top_k = 3,
+            load_in_8bit = True,
+        )
+    memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=vectorstore.as_retriever(),
+        retriever=vetorestore.as_retriever(),
         memory=memory
     )
     return conversation_chain
+
 
 def handle_userinput(user_question, target_language,response_language):
     # Translate user's question to English (or desired target language)
@@ -80,17 +92,26 @@ def handle_userinput(user_question, target_language,response_language):
 
     response = st.session_state.conversation({'question': user_question})
     st.session_state.chat_history = response['chat_history']
+    
+    response_container = st.container()
 
-    for i, message in enumerate(st.session_state.chat_history):
-        if i % 2 == 0:
-            st.write(user_template.replace(
-                "{{MSG}}", message.content), unsafe_allow_html=True)
+    with response_container:
+        for i, messages in enumerate(st.session_state.chat_history):
+            if i % 2 == 0:
+                message(messages.content, is_user=True, key=str(i))
+            else:
+                message(messages.content, key=str(i))
+
+    # for i, message in enumerate(st.session_state.chat_history):
+    #     if i % 2 == 0:
+    #         st.write(user_template.replace(
+    #             "{{MSG}}", message.content), unsafe_allow_html=True)
             
-        else:
-            # Translate bot's response back to the user's language
-            translated_response = translate_text(message.content, response_language)
-            bot_response = bot_template.replace("{{MSG}}", translated_response)
-            st.write(bot_response, unsafe_allow_html=True)
+    #     else:
+    #         # Translate bot's response back to the user's language
+    #         translated_response = translate_text(message.content, response_language)
+    #         bot_response = bot_template.replace("{{MSG}}", translated_response)
+    #         st.write(bot_response, unsafe_allow_html=True)
     
 
             # Add a "Talk Back" button for each bot response
@@ -100,7 +121,7 @@ def handle_userinput(user_question, target_language,response_language):
             # If the "Talk Back" button is clicked, read out the bot response
             if talk_back_button:
                 engine = pyttsx3.init()
-                engine.say(message.content) 
+                engine.say(messages.content) 
                 engine.runAndWait()
 
 
@@ -212,8 +233,8 @@ def main():
     load_dotenv()
     st.set_page_config(page_title="Snap Text",
                        page_icon=":bot:")
-    st.write(css, unsafe_allow_html=True)
-    st.markdown(sidebar_custom_css, unsafe_allow_html=True)
+    # st.write(css, unsafe_allow_html=True)
+    # st.markdown(sidebar_custom_css, unsafe_allow_html=True)
     
     target_language = st.selectbox("Select Document language (Target)", ["en", "es", "fr", "de"], key="target_language")
     response_language = st.selectbox("Select Document language (Response)", ["en", "es", "fr", "de"], key="response_language")
@@ -226,6 +247,8 @@ def main():
         st.session_state.user_question = ""
     if "youtube_link" not in st.session_state:
         st.session_state.youtube_link = ""
+    if "processComplete" not in st.session_state:
+        st.session_state.processComplete = None
 
     st.header("Snap Text :books:")
 
@@ -233,10 +256,13 @@ def main():
     if st.button("🎤 Microphone"):
         handle_microphone_input()
 
-    user_question = st.text_input("Ask a question about your documents:", value=st.session_state.user_question)
+    # user_question = st.text_input("Ask a question about your documents:", value=st.session_state.user_question)
 
-    if user_question:
-        handle_userinput(user_question,target_language,response_language)
+    # if  st.session_state.processComplete == True:
+    #     user_question = st.chat_input("Ask Question about your files.")
+        
+    #     if user_question:
+    #         handle_userinput(user_question,target_language,response_language)
 
     with st.sidebar:
 
@@ -258,20 +284,19 @@ def main():
                 vectorstore = get_vectorstore(text_chunks)
 
                 # create conversation chain
-                st.session_state.conversation = get_conversation_chain(
-                    vectorstore)
-                
+                st.session_state.conversation = get_conversation_chain(vectorstore)
+                st.session_state.processComplete = True
+       
+    
        
 
-        # Youtube link
-        st.subheader("Youtube Link")
-        youtube_link = st.text_input("Insert video link and click on 'Process Link'", value = st.session_state.youtube_link)
-
-
-        if st.button("Process Link"):
-            with st.spinner("Processing"):
-                # get transcription of youtube video
-                raw_text = youtube_process(youtube_link)
+                # Youtube link
+                st.subheader("Youtube Link")
+                youtube_link = st.text_input("Insert video link and click on 'Process Link'", value = st.session_state.youtube_link)
+                if st.button("Process Link"):
+                    with st.spinner("Processing"):
+                        # get transcription of youtube video
+                        raw_text = youtube_process(youtube_link)
 
                 # # get the text chunks
                 # text_chunks = get_text_chunks(raw_text)
@@ -282,6 +307,13 @@ def main():
                 # # create conversation chain
                 # st.session_state.conversation = get_conversation_chain(
                 #     vectorstore)
+
+        
+    if  st.session_state.processComplete == True:
+        user_question = st.chat_input("Ask Question about your files.")
+    
+        if user_question:
+            handle_userinput(user_question,target_language,response_language)
 
         
 
