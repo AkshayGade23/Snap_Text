@@ -5,23 +5,21 @@ from PyPDF2 import PdfReader
 from PIL import Image
 import pytesseract
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
+from langchain_community.vectorstores import FAISS
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
+from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
+from langchain_community.llms import HuggingFaceEndpoint
+from huggingsound import SpeechRecognitionModel
+import speech_recognition as sr
 from htmlTemplates import css, bot_template, user_template,sidebar_custom_css
 from pytube import YouTube
 import librosa
 import soundfile as sf
 import torch
 from transformers import pipeline
-from huggingsound import SpeechRecognitionModel
 import shutil
-from langchain_community.llms import HuggingFaceEndpoint
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from streamlit_chat import message
-import speech_recognition as sr
 from gtts import gTTS
 from io import BytesIO
 import pyttsx3 
@@ -124,6 +122,7 @@ def handle_userinput(user_question, target_language,response_language):
                 engine.say(messages.content) 
                 engine.runAndWait()
 
+
 def handle_microphone_input():
     recognizer = sr.Recognizer()
 
@@ -144,8 +143,6 @@ def handle_microphone_input():
 
 def download_video(videoURL):
     
-    yt = YouTube(videoURL)
-
     # deleting exiting directories \audio and \audio_chunks
     if os.path.exists("audio"):
         shutil.rmtree("audio")
@@ -153,10 +150,12 @@ def download_video(videoURL):
     if os.path.exists("audio_chunks"):
         shutil.rmtree("audio_chunks")
 
-
     # making directories \audio and \audio_chunks
     os.mkdir("./audio") # .mp3 and .wav file of whole video
-    os.mkdir("./audio_chunks") # original files chunks  
+    os.mkdir("./audio_chunks") # original files chunks
+    print("dfsdfsdafsdfadsf")
+    print(videoURL)
+    yt = YouTube(videoURL)
 
     yt.streams.filter(only_audio = True, file_extension = 'mp4').first().download(filename = 'audio\ytAudio.mp4')
     
@@ -165,16 +164,15 @@ def download_video(videoURL):
 
 
 def audio_chunking(inputFile):
-    print(librosa.get_samplerate(inputFile))
-
+    librosa.get_samplerate(inputFile)
     # Stream over 30 seconds chunks rather than load the whole file
     stream = librosa.stream(
         inputFile,
         block_length=30,
         frame_length=16000,
         hop_length=16000
-
     )
+
     number_of_files = 0
     for i,speech in enumerate(stream):
         number_of_files +=1
@@ -200,27 +198,17 @@ def audio_transcribe(number_of_files):
     fullTranscript = ' '
     for item in transcriptions:
         fullTranscript += ''.join(item['transcription'])
-    
-    # transcription summurizaton 
 
-    # print(fullTranscript)
-    # print("fdfsdfd")
-    # summarization = pipeline('summarization')
-    # summarizedText = summarization(fullTranscript)
-    # return summarizedText[0]['summary_text']
 
     return fullTranscript
 
 
 def youtube_process(videoURL):
-
     # downloading video and stored in /cotent/s
     download_video(videoURL)
-
     # audio chunking 
     inputFile = "audio\ytAudio.wav"
     number_of_files= audio_chunking(inputFile)
-
     # # audio transcribe and summarization
     summarizedText = audio_transcribe(number_of_files)
     print(summarizedText)
@@ -252,8 +240,8 @@ def main():
     st.header("Snap Text :books:")
 
     # Add a microphone button
-    if st.button("🎤 Microphone"):
-        handle_microphone_input()
+    # if st.button("🎤 Microphone"):
+    #     handle_microphone_input()
 
     # user_question = st.text_input("Ask a question about your documents:", value=st.session_state.user_question)
 
@@ -286,26 +274,30 @@ def main():
                 st.session_state.conversation = get_conversation_chain(vectorstore)
                 st.session_state.processComplete = True
        
+        st.header("OR")
+        
+        # Youtube link
+        st.subheader("Youtube Link")
+        youtube_link = st.text_input("Insert video link and click on 'Process Link'")
+        if st.button("Process Link"):
+            with st.spinner("Processing"):
+                # get transcription of youtube video
+                raw_text = youtube_process(youtube_link)
+
+                # get the text chunks
+                text_chunks = get_text_chunks(raw_text)
+
+                # create vector store
+                vectorstore = get_vectorstore(text_chunks)
+
+                # create conversation chain
+                st.session_state.conversation = get_conversation_chain(
+                    vectorstore)
+                st.session_state.processComplete = True
     
        
 
-                # Youtube link
-                st.subheader("Youtube Link")
-                youtube_link = st.text_input("Insert video link and click on 'Process Link'", value = st.session_state.youtube_link)
-                if st.button("Process Link"):
-                    with st.spinner("Processing"):
-                        # get transcription of youtube video
-                        raw_text = youtube_process(youtube_link)
-
-                # # get the text chunks
-                # text_chunks = get_text_chunks(raw_text)
-
-                # # create vector store
-                # vectorstore = get_vectorstore(text_chunks)
-
-                # # create conversation chain
-                # st.session_state.conversation = get_conversation_chain(
-                #     vectorstore)
+                
 
         
     if  st.session_state.processComplete == True:
